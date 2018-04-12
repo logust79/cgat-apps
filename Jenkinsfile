@@ -3,9 +3,6 @@ pipeline {
   environment {
     TERM = 'xterm'
   }
-  triggers {
-    pollSCM('H/15 * * * *')
-  }
   stages {
     stage('Clean up') {
       steps {
