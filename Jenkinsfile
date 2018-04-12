@@ -8,10 +8,14 @@ pipeline {
   }
   stages {
     stage('Clean up') {
-      deleteDir()
+      steps {
+        deleteDir()
+      }
     }
     stage('Get cgat-apps') {
-      checkout scm
+      steps {
+        checkout scm
+      }
     }
     stage('Get cgat-core') {
       steps {
