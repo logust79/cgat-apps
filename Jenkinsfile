@@ -11,7 +11,9 @@ pipeline {
         dir(path: 'cgat-core') {
           git(url: 'https://github.com/cgat-developers/cgat-core.git', changelog: true, poll: true)
         }
-
+        dir(path: 'cgat-apps') {
+          git(url: 'https://github.com/cgat-developers/cgat-apps.git', changelog: true, poll: true)
+        }
       }
     }
     stage('Run tests') {
