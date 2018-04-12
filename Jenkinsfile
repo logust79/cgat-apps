@@ -3,8 +3,17 @@ pipeline {
   environment {
     TERM = 'xterm'
   }
+  options {
+    checkoutToSubdirectory('cgat-apps')
+  }
   stages {
-    stage('Get source code') {
+    stage('Clean up') {
+      deleteDir()
+    }
+    stage('Get cgat-apps') {
+      checkout scm
+    }
+    stage('Get cgat-core') {
       steps {
         dir(path: 'cgat-core') {
           git(url: 'https://github.com/cgat-developers/cgat-core.git', changelog: true, poll: true)
@@ -18,6 +27,11 @@ pipeline {
         }
 
       }
+    }
+  }
+  post {
+    failure {
+      mail to: 'sebastian.lunavalero@imm.ox.ac.uk', subject: 'Failed testing of cgat-app', body: 'Please visit https://jenkins for more details'
     }
   }
 }
