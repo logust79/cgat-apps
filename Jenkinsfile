@@ -1,5 +1,8 @@
 pipeline {
   agent any
+  environment {
+    TERM = 'xterm'
+  }
   stages {
     stage('Get source code') {
       steps {
