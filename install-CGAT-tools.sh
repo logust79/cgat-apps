@@ -372,6 +372,9 @@ if [[ -z ${TRAVIS_INSTALL} ]] ; then
             report_error " Unknown download type for CGAT code... "
          fi
 
+         # install cgat-core
+         install_cgat_core
+
          # make sure you are in the CGAT_HOME/cgat-apps folder
          cd $CGAT_HOME/cgat-apps
 
@@ -379,12 +382,6 @@ if [[ -z ${TRAVIS_INSTALL} ]] ; then
 
       # Set up other environment variables
       setup_env_vars
-
-      # install cgat-core
-      install_cgat_core
-
-      # brute force: modify console_scripts variable/entry point for cgat command
-      sed -i'' -e 's/CGATScripts/scripts/g' setup.py
 
       # Python preparation
       # remove install_requires (no longer required with conda package)
