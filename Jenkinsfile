@@ -29,7 +29,7 @@ pipeline {
     stage('Run tests') {
       steps {
         catchError() {
-          sh 'xvfb-run bash install-CGAT-tools.sh --jenkins'
+          sh 'xvfb-run bash cgat-apps/install-CGAT-tools.sh --jenkins'
         }
 
       }
