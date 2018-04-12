@@ -3,8 +3,8 @@ pipeline {
   environment {
     TERM = 'xterm'
   }
-  options {
-    checkoutToSubdirectory('cgat-apps')
+  triggers {
+    pollSCM('H/15 * * * *')
   }
   stages {
     stage('Clean up') {
@@ -14,7 +14,9 @@ pipeline {
     }
     stage('Get cgat-apps') {
       steps {
-        checkout scm
+        dir(path: 'cgat-apps') {
+          checkout scm
+        }
       }
     }
     stage('Get cgat-core') {
