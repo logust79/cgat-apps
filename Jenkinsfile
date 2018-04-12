@@ -31,13 +31,8 @@ pipeline {
         catchError() {
           sh 'xvfb-run bash cgat-apps/install-CGAT-tools.sh --jenkins'
         }
-
+        step([$class: 'Mailer', recipients: 'sebastian.lunavalero@imm.ox.ac.uk'])
       }
-    }
-  }
-  post {
-    failure {
-      mail to: 'sebastian.lunavalero@imm.ox.ac.uk', subject: 'Failed testing of cgat-app', body: 'Please visit https://jenkins for more details'
     }
   }
 }

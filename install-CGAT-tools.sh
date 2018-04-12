@@ -375,13 +375,13 @@ if [[ -z ${TRAVIS_INSTALL} ]] ; then
          # install cgat-core
          install_cgat_core
 
-         # make sure you are in the CGAT_HOME/cgat-apps folder
-         cd $CGAT_HOME/cgat-apps
-
       fi
 
       # Set up other environment variables
       setup_env_vars
+
+      # make sure you are in the CGAT_HOME/cgat-apps folder
+      cd $CGAT_HOME/cgat-apps
 
       # Python preparation
       # remove install_requires (no longer required with conda package)
