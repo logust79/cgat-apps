@@ -463,7 +463,7 @@ if [[ $TRAVIS_INSTALL ]] || [[ $JENKINS_INSTALL ]] ; then
 
    # python preparation
    log "install CGAT code into conda environment"
-   cd $CGAT_HOME
+   cd $CGAT_HOME/cgat-apps
    # remove install_requires (no longer required with conda package)
    sed -i'' -e '/REPO_REQUIREMENT/,/pass/d' setup.py
    sed -i'' -e '/# dependencies/,/dependency_links=dependency_links,/d' setup.py
