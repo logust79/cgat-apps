@@ -1,6 +1,11 @@
 pipeline {
   agent any
   stages {
+    stage('Cleanup workspace') {
+      steps {
+        deleteDir()
+      }
+    }
     stage('Get source code') {
       steps {
         dir(path: 'cgat-core') {
@@ -11,11 +16,6 @@ pipeline {
           git(url: 'https://github.com/cgat-developers/cgat-apps.git', changelog: true, poll: true)
         }
 
-      }
-    }
-    stage('Cleanup workspace') {
-      steps {
-        deleteDir()
       }
     }
     stage('Run tests') {
