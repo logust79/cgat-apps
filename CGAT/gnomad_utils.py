@@ -2,7 +2,7 @@ from __future__ import print_function, division
 import sys
 import tabix
 import os
-import utils
+from CGAT import utils
 
 class BadVariantException(Exception): pass
 #path = '/cluster/project8/vyp/gnomad_data'
@@ -116,6 +116,7 @@ def overall_freqs(vs,path_to_gnomad):
         'filters':{'exome':None,'genome':None},
         'pop_filter':[],
         'most_freq_pops':[],
+        'pops': None,
     }
     for v in vs:
 
@@ -193,6 +194,7 @@ def overall_freqs(vs,path_to_gnomad):
             'filters':filters,
             'pop_filter':pop_filter,
             'most_freq_pops':max_pop[0],
+            'pops':pops,
         }
 
     return result
