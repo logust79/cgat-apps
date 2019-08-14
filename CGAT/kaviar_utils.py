@@ -4,6 +4,7 @@ query kaviar to get af. no hom_f is available
 from __future__ import division, print_function
 import gzip
 import pysam
+from CGAT import utils
 
 def get_variants_from_tbx(fetch, variants, header):
     variants_set = set(variants)
@@ -16,21 +17,28 @@ def get_variants_from_tbx(fetch, variants, header):
             field = field.split('=')
             info[field[0]] = field[1]
         for ind,alt in enumerate(record['ALT'].split(',')):
-            v_id = '-'.join([
+            v_id = utils.clean_variant('-'.join([
                 record['CHROM'],
                 record['POS'],
                 record['REF'],
                 alt,
-            ])
+            ]))
             if v_id not in variants:
                 continue
             # get all info in 'INFO'
+            result[v_id] = result.get(v_id,{
+                'filter': None,
+                'af': None,
+                'ac': 0,
+                'an': 0
+            })
+
             result[v_id] = {
                     'filter': None,
-                    'af': float(info['AF'].split(',')[ind]),
-                    'ac': int(info['AC'].split(',')[ind]),
-                    'an': int(info['AN']),
+                    'ac': int(info['AC'].split(',')[ind]) + result[v_id]['ac'],
+                    'an': int(info['AN']) + result[v_id]['an'],
             }
+            result[v_id]['af'] = result[v_id]['ac'] / result[v_id]['an']
     return result
 
 def kaviar(variants, kaviar_vcf, group=True):
@@ -64,25 +72,33 @@ def kaviar(variants, kaviar_vcf, group=True):
         positions = sorted(positions, key=lambda x: x[0])
         min_pos = positions[0][0]
         max_pos = positions[-1][0]
-        fetch = tbx.fetch(chrom, min_pos-1, max_pos+1)
-        result = get_variants_from_tbx(fetch, variants, header)
+        try:
+            fetch = tbx.fetch(chrom, min_pos-1, max_pos+1)
+        except ValueError:
+            result = {}
+        else:
+            result = get_variants_from_tbx(fetch, variants, header)
     else:
         # deal with variants one by one
         for variant in variants:
             chrom = variant.split('-')[0]
             pos = int(variant.split('-')[1])
-            fetch = tbx.fetch(chrom, pos-1, pos+1)
-            this = get_variants_from_tbx(
-                    fetch,
-                    [variant],
-                    header)
-            if variant in this:
-                result[variant] = this[variant]
+            try:
+                fetch = tbx.fetch(chrom, pos-1, pos+1)
+            except ValueError:
+                result = {}
+            else:
+                this = get_variants_from_tbx(
+                        fetch,
+                        [variant],
+                        header)
+                if variant in this:
+                    result[variant] = this[variant]
 
     return result
 
 if __name__ == '__main__':
-    vs = ['1-10002-A-C','1-10003-A-T']
+    vs = ['1-10002-A-C','1-10003-A-T','1-884091-C-CACCCTGGTCCCCCTGGTCCCTTTGGCCCTGCACCTGGCTGG']
     vcf = '/cluster/project8/vyp/kaviar/Kaviar-160204-Public-hg19-trim.vcf.gz'
     result = kaviar(vs, vcf, group=True)
     print(result)

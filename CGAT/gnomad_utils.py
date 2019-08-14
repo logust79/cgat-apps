@@ -1,78 +1,96 @@
+'''
+annotate gnomad population frequencies
+!!!NOTE!!! that you need to normalise all variants before using this script, e.g.
+maps = {variant:utils.clean_variant(variant) for variant in variants}
+gnomads = gnomad_utils.overall_freqs(list(maps.values()),path_to_gnomad,group=True)
+result = {variant:gnomads.get(maps[variant],None) for variant in maps}
+'''
 from __future__ import print_function, division
 import sys
+import pysam
 import tabix
 import os
 from CGAT import utils
 
 class BadVariantException(Exception): pass
 #path = '/cluster/project8/vyp/gnomad_data'
-VALID_CHROMOSOMES = [str(i) for i in range(1,23)] + ['X','Y']
+VALID_CHROMOSOMES = [str(i) for i in range(1,23)] + ['X']
 POPS = ('AFR','NFE','AMR','EAS','ASJ','SAS','OTH','FIN')
 '''
 coverage, look at different parts of the ref
 '''
-def coverage(v,path_to_gnomad,mode='exome'):
-    v = utils.clean_variant(v)
-    # pytabix does not support header yet. hard code it
+def coverage(vs,path_to_gnomad,mode,chrom,start,stop):
+    # pysam does not support header yet. hard code it
     header = ['chrom','pos','mean','median',1,5,10,15,20,25,30,50,100,]
-    chrom,pos,ref,alt = v.split('-')
+    result = {v:None for v in vs}
+    vcf = None
     if mode == 'exome':
-        file = os.path.join(path_to_gnomad,'coverage','exomes','exacv2.chr'+chrom+'.cov.txt.gz')
+        vcf = os.path.join(path_to_gnomad,'coverage','exomes','exacv2.chr'+chrom+'.cov.txt.gz')
     elif mode == 'genome':
-        file = os.path.join(path_to_gnomad,'coverage','genomes','gnomad.chr'+chrom+'.cov.txt.gz')
+        vcf = os.path.join(path_to_gnomad,'coverage','genomes','gnomad.chr'+chrom+'.cov.txt.gz')
     else:
         msg = "mode only accepts 'exome' or 'genome'"
         raise ValueError(msg)
-    tb = tabix.open(file)
-    start = int(pos) - 1
-    end = int(pos)
-    if len(ref) != len(alt):
-        # indel. since cleaned, only need to shit 1 position
-        start += 1
-        end += len(ref) - 1
+    try:
+        tb = pysam.TabixFile(vcf)
+        rs = tb.fetch(chrom, start-1, stop+1)
+    except OSError:
+        return result
+    except ValueError:
+        return result
 
-    rs = tb.query(chrom, start, end)
-    result = {}
+    cov_record = {}
     for r in rs:
-        this = {a:b for a,b in zip(header,r)}
-        result[int(this['pos'])] = this
-    if not result:
-        # not covered
-        return None
-    # if indel, check if all ref positions are covered
-    if len(ref) == len(alt):
-        return result
-    else:
-        for p in range(start+1,end+1):
-            if p not in result: return None
-        return result
+        this = {a:b for a,b in zip(header,r.split('\t'))}
+        cov_record[int(this['pos'])] = this
+    for v in vs:
+        _,pos,ref,_ = v.split('-')
+        pos = int(pos)
+        end = pos + len(ref)
+        for i in range(pos,end):
+            if i not in cov_record:
+                result[v] = None
+                break
+            if result[v] is None:
+                result[v] = {pos: cov_record[pos]}
+            else:
+                result[v][pos] = cov_record[pos]
+            
+    return result
 
 '''
 exome freqs
 '''
-def freqs(v,path_to_gnomad,mode='exome'):
-    v = utils.clean_variant(v)
+def freqs(vs,path_to_gnomad,mode,chrom,start,stop):
     # pytabix does not support header yet. hard code it
     header = ['chrom','pos','id','ref','alt','quality','filter','info']
-    chrom,pos,ref,alt = v.split('-')
     if mode == 'exome':
-        file = os.path.join(path_to_gnomad,'vcf','exomes','gnomad.exomes.r2.0.1.sites.vcf.gz')
+        vcf = os.path.join(path_to_gnomad,'vcf','exomes','gnomad.exomes.r2.0.1.sites.vcf.gz')
     elif mode == 'genome':
-        file = os.path.join(path_to_gnomad,'vcf','genomes','gnomad.genomes.r2.0.1.sites.'+chrom+'.vcf.gz')
-    tb = tabix.open(file)
-    records = tb.query(chrom, int(pos)-1, int(pos))
+        vcf = os.path.join(path_to_gnomad,'vcf','genomes','gnomad.genomes.r2.0.1.sites.'+chrom+'.vcf.gz')
+    result = {v:{} for v in vs}
+    try:
+        tb = pysam.TabixFile(vcf)
+        records = tb.fetch(chrom, start-1, stop+1)
+    except OSError:
+        return result
+    except ValueError:
+        return result
+    #tb = tabix.open(vcf)
+    #records = tb.query(chrom, int(pos)-1, int(pos))
 
     for r in records:
-        if not r: return None
-        data = {a:b for a,b in zip(header,r)}
+        if not r: return result
+        data = {a:b for a,b in zip(header,r.split('\t'))}
         # find the variant
         g_alts = data['alt'].split(',')
         alt_ind = None
+        v_ids = []
         for ind,this_alt in enumerate(g_alts):
             v_id = utils.clean_variant('-'.join([data['chrom'],data['pos'],data['ref'],this_alt]))
-            if v_id == v:
-                alt_ind = ind
-        if alt_ind == None:
+            if v_id in vs:
+                v_ids.append((v_id, ind))
+        if not v_ids:
             continue
 
         # parse info
@@ -80,32 +98,36 @@ def freqs(v,path_to_gnomad,mode='exome'):
 
         info = data['info'].split(';CSQ=A')[0] # 1 for annotation
         info = info.split(';')
-        info_dict = {}
         for i in info:
             if not '=' in i: continue
             a,b = i.split('=')
             b = b.split(',')
-            ind = min(alt_ind,len(b)-1)
-            b = b[ind]
-            # convert to number if possible
-            try:
-                if '.' in b:
-                    b = float(b)
-                else:
-                    b = int(b)
-            except ValueError:
-                pass
-            info_dict[a] = b
-        info_dict['filter'] = data['filter']
-        return info_dict
+            for v_ind in range(len(v_ids)):
+                ind = min(v_ids[v_ind][1],len(b)-1)
+                c = b[ind]
+                # convert to number if possible
+                try:
+                    if '.' in c:
+                        c = float(c)
+                    else:
+                        c = int(c)
+                except ValueError:
+                    pass
+                result[v_ids[v_ind][0]][a] = c
+        for v in v_ids:
+            result[v[0]]['filter'] = data['filter']
                 
-    return None
+    return result
 
 
 '''
 simple query on overall allele freq (or homozygote frequency). if covered, return at least 0. if not, return None. 
+Assuming all variants are on the same chrom, and close together. If not, please
+query a single variant (in a list) at a time
 '''
 def overall_freqs(vs,path_to_gnomad):
+    # get start, stop and chrom if block
+    chrom,start,stop = utils.get_chrom_start_stop(vs)
     result = {}
     null = {
         'gnomad_af': None,
@@ -116,23 +138,22 @@ def overall_freqs(vs,path_to_gnomad):
         'filters':{'exome':None,'genome':None},
         'pop_filter':[],
         'most_freq_pops':[],
-        'pops': None,
+    }
+    covs = {
+        'exome': coverage(vs,path_to_gnomad,'exome',chrom,start,stop),
+        'genome':coverage(vs,path_to_gnomad,'genome',chrom,start,stop),
+    }
+    fs = {
+        'exome': freqs(vs,path_to_gnomad,'exome',chrom,start,stop),
+        'genome':freqs(vs,path_to_gnomad,'genome',chrom,start,stop),
     }
     for v in vs:
 
         if v.split('-')[0] not in VALID_CHROMOSOMES:
             result[v] = null
             continue
-        covs = {
-            'exome': coverage(v,path_to_gnomad,mode='exome'),
-            'genome':coverage(v,path_to_gnomad,mode='genome'),
-        }
-        fs = {
-            'exome': freqs(v,path_to_gnomad,mode='exome'),
-            'genome':freqs(v,path_to_gnomad,mode='genome'),
-        }
 
-        if not fs['exome'] and not fs['genome'] and not covs['exome'] and not covs['genome']:
+        if not fs['exome'][v] and not fs['genome'][v] and not covs['exome'][v] and not covs['genome'][v]:
             result[v] = null
             continue
         ac = hom_c = af = hom_f = an = 0.
@@ -143,17 +164,17 @@ def overall_freqs(vs,path_to_gnomad):
         # with big af(>0.01)/hom_f(0) discrepancy, such as 1-144931607-C-T
         pops = {p:{'Hom':0,'Hemi':0,'AC':0,'AN':0} for p in POPS}
         for m in ['exome', 'genome']:
-            if fs[m]:
-                ac += fs[m]['AC']
-                hom_c += fs[m]['Hom']
-                an += fs[m]['AN']
-                if 'Hemi' in fs[m]:
-                    hemi_c = hemi_c + fs[m]['Hemi'] if hemi_c != None else fs[m]['Hemi']
-                filters[m] = fs[m]['filter']
+            if fs[m][v]:
+                ac += fs[m][v]['AC']
+                hom_c += fs[m][v]['Hom']
+                an += fs[m][v]['AN']
+                if 'Hemi' in fs[m][v]:
+                    hemi_c = hemi_c + fs[m][v]['Hemi'] if hemi_c != None else fs[m][v]['Hemi']
+                filters[m] = fs[m][v]['filter']
                 for p in POPS:
                     for kk in pops[p]:
                         try:
-                            this_c = fs[m].get('{}_{}'.format(kk,p), 0)
+                            this_c = fs[m][v].get('{}_{}'.format(kk,p), 0)
                             # sometimes on X this_c is a dot
                             if this_c == '.':
                                 this_c = 0
@@ -162,7 +183,7 @@ def overall_freqs(vs,path_to_gnomad):
                             print(v)
                             print(p,kk)
                             print(pops[p][kk])
-                            print(fs[m].get('{}_{}'.format(kk,p), 0))
+                            print(fs[m][v].get('{}_{}'.format(kk,p), 0))
                             raise
 
         max_pop = ([], -1)
@@ -194,7 +215,14 @@ def overall_freqs(vs,path_to_gnomad):
             'filters':filters,
             'pop_filter':pop_filter,
             'most_freq_pops':max_pop[0],
-            'pops':pops,
         }
 
     return result
+
+if __name__ == '__main__':
+    vs = ['M-150-T-C','1-12140-GCAT-C','1-12141-CAT-C','1-12143-T-C','1-40705-C-T','1-165389-CA-C','1-107189335-C-CTTTT']
+    p2g = '/cluster/project8/vyp/gnomad_data'
+    #print(freqs(vs[1:-1],p2g,'genome','1',12140,165390))
+    print(overall_freqs(vs[1:-1],p2g))
+    vs = ['1-55516888-G-GA','1-55516887-GG-GGA']
+    print(overall_freqs(vs,p2g))

@@ -73,20 +73,28 @@ def bravo(variants, bravo_vcf, group = True):
         positions = sorted(positions, key=lambda x: x[0])
         min_pos = positions[0][0]
         max_pos = positions[-1][0]
-        fetch = tbx.fetch(chrom, min_pos-1, max_pos+1)
-        result = get_variants_from_tbx(fetch, variants, header)
+        try:
+            fetch = tbx.fetch(chrom, min_pos-1, max_pos+1)
+        except ValueError:
+            result = {}
+        else:
+            result = get_variants_from_tbx(fetch, variants, header)
     else:
         # deal with variants one by one
         for variant in variants:
             chrom = get_chrom(variant)
             pos = int(variant.split('-')[1])
-            fetch = tbx.fetch(chrom, pos-1, pos+1)
-            this = get_variants_from_tbx(
-                    fetch,
-                    [variant],
-                    header)
-            if variant in this:
-                result[variant] = this[variant]
+            try:
+                fetch = tbx.fetch(chrom, pos-1, pos+1)
+            except ValueError:
+                result = {}
+            else:
+                this = get_variants_from_tbx(
+                        fetch,
+                        [variant],
+                        header)
+                if variant in this:
+                    result[variant] = this[variant]
 
 
     return result
